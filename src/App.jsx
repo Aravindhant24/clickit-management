@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import seedLicenses from '../data/multisite-licenses.json'
 
 const sidebarSections = [
   {
@@ -86,7 +87,27 @@ const cameraRows = [
   { model: 'CAM400WA', cameras: '3,791', systems: '3,450', ai: '3,450' },
 ]
 
-const API_BASE = 'http://localhost:4000/api/licenses'
+const API_BASE = `${(import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')}/licenses`
+const LOCAL_STORAGE_KEY = 'clickitai-license-rows'
+
+const getLocalLicenseRows = () => {
+  if (typeof window === 'undefined') return seedLicenses
+
+  const saved = window.localStorage.getItem(LOCAL_STORAGE_KEY)
+  if (!saved) return seedLicenses
+
+  try {
+    const parsed = JSON.parse(saved)
+    return Array.isArray(parsed) ? parsed : seedLicenses
+  } catch {
+    return seedLicenses
+  }
+}
+
+const saveLocalLicenseRows = (rows) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(rows))
+}
 
 function App() {
   const [openMenus, setOpenMenus] = useState({})
@@ -104,6 +125,7 @@ function App() {
   const [editForm, setEditForm] = useState({ name: '', email: '', status: 'Active', expiry: '' })
   const [viewRow, setViewRow] = useState(null)
   const [tableMessage, setTableMessage] = useState('')
+  const [, setOfflineMode] = useState(false)
   const pageSize = 5
 
   const toggleMenu = (key) => {
@@ -124,25 +146,32 @@ function App() {
       if (!res.ok) throw new Error('Failed to fetch data')
       const rows = await res.json()
       setLicenseRows(rows)
+      setOfflineMode(false)
       setTableMessage('')
     } catch {
-      setTableMessage('Unable to load license data. Make sure API server is running.')
+      const fallbackRows = getLocalLicenseRows()
+      setLicenseRows(fallbackRows)
+      setOfflineMode(true)
+      setTableMessage('')
     }
   }
 
   const handleAddLicense = async () => {
     if (!licenseForm.name.trim() || !licenseForm.email.trim() || !licenseForm.expiry.trim()) return
 
+    const nextRow = {
+      id: licenseRows.reduce((max, row) => Math.max(max, row.id || 0), 0) + 1,
+      ...licenseForm,
+      name: licenseForm.name.trim(),
+      email: licenseForm.email.trim(),
+      expiry: licenseForm.expiry.trim(),
+    }
+
     try {
       const res = await fetch(API_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...licenseForm,
-          name: licenseForm.name.trim(),
-          email: licenseForm.email.trim(),
-          expiry: licenseForm.expiry.trim(),
-        }),
+        body: JSON.stringify(nextRow),
       })
       if (!res.ok) throw new Error('create failed')
       const created = await res.json()
@@ -154,9 +183,21 @@ function App() {
         status: 'Active',
         expiry: '',
       })
+      setOfflineMode(false)
       setTableMessage('')
     } catch {
-      setTableMessage('Failed to add license row.')
+      const nextRows = [...licenseRows, nextRow]
+      setLicenseRows(nextRows)
+      saveLocalLicenseRows(nextRows)
+      setCurrentPage(Math.ceil(nextRows.length / pageSize))
+      setLicenseForm({
+        name: '',
+        email: '',
+        status: 'Active',
+        expiry: '',
+      })
+      setOfflineMode(true)
+      setTableMessage('API server unavailable. Added the license locally in this browser.')
     }
   }
 
@@ -173,24 +214,32 @@ function App() {
   const handleSaveEdit = async (id) => {
     if (!editForm.name.trim() || !editForm.email.trim() || !editForm.expiry.trim()) return
 
+    const updatedDraft = {
+      name: editForm.name.trim(),
+      email: editForm.email.trim(),
+      status: editForm.status,
+      expiry: editForm.expiry.trim(),
+    }
+
     try {
       const res = await fetch(`${API_BASE}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editForm.name.trim(),
-          email: editForm.email.trim(),
-          status: editForm.status,
-          expiry: editForm.expiry.trim(),
-        }),
+        body: JSON.stringify(updatedDraft),
       })
       if (!res.ok) throw new Error('update failed')
       const updated = await res.json()
       setLicenseRows((prev) => prev.map((row) => (row.id === id ? updated : row)))
       setEditingId(null)
+      setOfflineMode(false)
       setTableMessage('')
     } catch {
-      setTableMessage('Failed to save changes.')
+      const nextRows = licenseRows.map((row) => (row.id === id ? { ...row, ...updatedDraft } : row))
+      setLicenseRows(nextRows)
+      saveLocalLicenseRows(nextRows)
+      setEditingId(null)
+      setOfflineMode(true)
+      setTableMessage('API server unavailable. Saved the changes locally in this browser.')
     }
   }
 
@@ -201,9 +250,16 @@ function App() {
       setLicenseRows((prev) => prev.filter((row) => row.id !== id))
       if (editingId === id) setEditingId(null)
       if (viewRow?.id === id) setViewRow(null)
+      setOfflineMode(false)
       setTableMessage('')
     } catch {
-      setTableMessage('Failed to remove row.')
+      const nextRows = licenseRows.filter((row) => row.id !== id)
+      setLicenseRows(nextRows)
+      saveLocalLicenseRows(nextRows)
+      if (editingId === id) setEditingId(null)
+      if (viewRow?.id === id) setViewRow(null)
+      setOfflineMode(true)
+      setTableMessage('API server unavailable. Removed the license locally in this browser.')
     }
   }
 
