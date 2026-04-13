@@ -23,11 +23,25 @@ app.use(express.json())
 const client = new MongoClient(MONGODB_URI)
 let licensesCollection
 
+const getStatusFromExpiry = (expiry, fallbackStatus = 'Active') => {
+  const text = String(expiry || '').trim()
+  const parsed = new Date(text.split('(')[0].trim())
+  if (Number.isNaN(parsed.getTime())) return fallbackStatus
+
+  const now = new Date()
+  const msPerDay = 1000 * 60 * 60 * 24
+  const diff = Math.ceil((parsed.setHours(0, 0, 0, 0) - now.setHours(0, 0, 0, 0)) / msPerDay)
+
+  if (diff < 0) return 'Expired'
+  if (diff <= 30) return 'Expiring'
+  return 'Active'
+}
+
 const normalizeLicense = (doc) => ({
   id: doc._id.toString(),
   name: doc.name,
   email: doc.email,
-  status: doc.status,
+  status: getStatusFromExpiry(doc.expiry, doc.status),
   expiry: doc.expiry,
 })
 
@@ -49,6 +63,18 @@ const loadSeedLicenses = async () => {
 const ensureSeedData = async () => {
   const count = await licensesCollection.countDocuments()
   if (count > 0) {
+    const existingRows = await licensesCollection.find({}).toArray()
+    await Promise.all(
+      existingRows.map((row) => {
+        const nextStatus = getStatusFromExpiry(row.expiry, row.status)
+        if (nextStatus === row.status) return Promise.resolve()
+
+        return licensesCollection.updateOne(
+          { _id: row._id },
+          { $set: { status: nextStatus, updatedAt: new Date() } }
+        )
+      })
+    )
     await syncJsonSnapshot()
     return
   }
@@ -58,6 +84,7 @@ const ensureSeedData = async () => {
     await licensesCollection.insertMany(
       rows.map((row) => ({
         ...row,
+        status: getStatusFromExpiry(row.expiry, row.status),
         createdAt: new Date(),
         updatedAt: new Date(),
       }))
@@ -97,7 +124,7 @@ app.post('/api/licenses', async (req, res) => {
     const newRow = {
       name,
       email,
-      status,
+      status: getStatusFromExpiry(expiry, status),
       expiry,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -119,11 +146,16 @@ app.put('/api/licenses/:id', async (req, res) => {
     if (!isValidId(id)) return res.status(400).json({ message: 'Invalid license id' })
 
     const { name, email, status, expiry } = req.body
+    const existing = await licensesCollection.findOne({ _id: new ObjectId(id) })
+    if (!existing) return res.status(404).json({ message: 'License not found' })
+
+    const nextExpiry = expiry !== undefined ? expiry : existing.expiry
+    const nextStatus = getStatusFromExpiry(nextExpiry, status ?? existing.status)
     const update = {
       ...(name !== undefined ? { name } : {}),
       ...(email !== undefined ? { email } : {}),
-      ...(status !== undefined ? { status } : {}),
       ...(expiry !== undefined ? { expiry } : {}),
+      status: nextStatus,
       updatedAt: new Date(),
     }
 
@@ -133,7 +165,6 @@ app.put('/api/licenses/:id', async (req, res) => {
       { returnDocument: 'after' }
     )
 
-    if (!result) return res.status(404).json({ message: 'License not found' })
     await syncJsonSnapshot()
     res.json(normalizeLicense(result))
   } catch (error) {
