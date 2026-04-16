@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import sslImage from './assets/ssl.png'
+import systemUpdateImage from './assets/system-update.png'
+import serviceChannelImage from './assets/servicechannel.png'
 
 const sidebarSections = [
   {
@@ -42,6 +45,7 @@ const sidebarSections = [
           '360 Licensing',
           'Analytics Licensing',
           'Protection Area Licensing',
+          'Multisite License',
         ],
       },
     ],
@@ -61,36 +65,50 @@ const sidebarSections = [
 ]
 
 const tools = [
-  'Live View',
-  'Video Playback',
-  'POS Exceptions',
-  'Operating System',
-  'Web Users',
-  'SSL Certificates',
-  'System Scanner',
-  'ServiceChannel',
+  { label: 'Camera Firmware Update', type: 'firmware' },
+  { label: 'Camera Password', type: 'password' },
+  { label: 'Operating System', type: 'image', image: systemUpdateImage, alt: 'Operating system tool' },
+  { label: 'Web Users', type: 'users' },
+  { label: 'SSL Certificates', type: 'image', image: sslImage, alt: 'SSL certificates tool', isNew: true },
+  { label: 'System Scanner', type: 'scanner', isNew: true },
 ]
 
-const actionItems = [
-  { label: 'Systems with Older ClickIt Software Versions', value: '3,102 (33%) / 10,971', level: 33 },
-  { label: 'SSL Certificates Expiring Soon', value: '2 certificates', level: 9 },
-  { label: 'Security Patch Updates', value: '1,371 systems', level: 52 },
-]
+const actionItemUiMap = {
+  'older-clickit-versions': {
+    panelId: 'camera-models-panel',
+    feedback: 'Opened IP Camera Models.',
+  },
+  'ssl-certificates-expiring-soon': {
+    icon: sslImage,
+    iconAlt: 'SSL certificate illustration',
+    panelId: 'trial-license-panel',
+    feedback: 'Opened VM Trial Licenses.',
+  },
+  'security-patch-updates': {
+    icon: systemUpdateImage,
+    iconAlt: 'Security patch update illustration',
+    panelId: 'multisite-license-panel',
+    feedback: 'Opened Multisite License.',
+  },
+}
 
-const cameraRows = [
-  { model: 'CAM225', cameras: '9,233', systems: '9,142', ai: '5,520' },
-  { model: 'CAM1100', cameras: '8,318', systems: '8,253', ai: '2,556' },
-  { model: 'CAM360', cameras: '7,259', systems: '7,152', ai: '4,897' },
-  { model: 'CAM5000IR', cameras: '5,000', systems: '4,876', ai: '0' },
-  { model: 'CAM5000BX', cameras: '4,104', systems: '4,000', ai: '0' },
-  { model: 'CAM400WA', cameras: '3,791', systems: '3,450', ai: '3,450' },
-]
-
-const API_BASE = 'http://localhost:4000/api/licenses'
+const API_ROOT = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+const LICENSES_API_BASE = `${API_ROOT}/licenses`
+const CAMERA_MODELS_API_BASE = `${API_ROOT}/camera-models`
+const SYSTEM_STATUS_API_BASE = `${API_ROOT}/system-status`
+const ACTION_ITEMS_API_BASE = `${API_ROOT}/action-items`
 
 function App() {
   const [openMenus, setOpenMenus] = useState({})
   const [licenseRows, setLicenseRows] = useState([])
+  const [cameraRows, setCameraRows] = useState([])
+  const [cameraViewRow, setCameraViewRow] = useState(null)
+  const [systemStatus, setSystemStatus] = useState({
+    totalSystems: 0,
+    systemsOnline: 0,
+    systemsOffline: 0,
+  })
+  const [actionItems, setActionItems] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [licenseForm, setLicenseForm] = useState({
     name: '',
@@ -104,6 +122,9 @@ function App() {
   const [editForm, setEditForm] = useState({ name: '', email: '', status: 'Active', expiry: '' })
   const [viewRow, setViewRow] = useState(null)
   const [tableMessage, setTableMessage] = useState('')
+  const [cameraTableMessage, setCameraTableMessage] = useState('')
+  const [systemStatusMessage, setSystemStatusMessage] = useState('')
+  const [actionItemsMessage, setActionItemsMessage] = useState('')
   const pageSize = 5
 
   const toggleMenu = (key) => {
@@ -120,33 +141,83 @@ function App() {
 
   const fetchLicenses = async () => {
     try {
-      const res = await fetch(API_BASE)
+      const res = await fetch(LICENSES_API_BASE)
       if (!res.ok) throw new Error('Failed to fetch data')
       const rows = await res.json()
       setLicenseRows(rows)
       setTableMessage('')
     } catch {
-      setTableMessage('Unable to load license data. Make sure API server is running.')
+      setLicenseRows([])
+      setTableMessage('Unable to load license data. Start the backend API with `npm run server`.')
+    }
+  }
+
+  const fetchCameraModels = async () => {
+    try {
+      const res = await fetch(CAMERA_MODELS_API_BASE)
+      if (!res.ok) throw new Error('Failed to fetch camera models')
+      const rows = await res.json()
+      setCameraRows(rows)
+      setCameraTableMessage('')
+    } catch {
+      setCameraRows([])
+      setCameraTableMessage('Unable to load camera models. Start the backend API with `npm run server`.')
+    }
+  }
+
+  const fetchSystemStatus = async () => {
+    try {
+      const res = await fetch(SYSTEM_STATUS_API_BASE)
+      if (!res.ok) throw new Error('Failed to fetch system status')
+      const row = await res.json()
+      setSystemStatus(row)
+      setSystemStatusMessage('')
+    } catch {
+      setSystemStatus({
+        totalSystems: 0,
+        systemsOnline: 0,
+        systemsOffline: 0,
+      })
+      setSystemStatusMessage('Unable to load system status. Start the backend API with `npm run server`.')
+    }
+  }
+
+  const fetchActionItems = async () => {
+    try {
+      const res = await fetch(ACTION_ITEMS_API_BASE)
+      if (!res.ok) throw new Error('Failed to fetch action items')
+      const rows = await res.json()
+      const mappedRows = rows.map((row) => ({
+        ...row,
+        ...actionItemUiMap[row.key],
+      }))
+      setActionItems(mappedRows)
+      setActionItemsMessage('')
+    } catch {
+      setActionItems([])
+      setActionItemsMessage('Unable to load action items. Start the backend API with `npm run server`.')
     }
   }
 
   const handleAddLicense = async () => {
     if (!licenseForm.name.trim() || !licenseForm.email.trim() || !licenseForm.expiry.trim()) return
 
+    const nextRow = {
+      ...licenseForm,
+      name: licenseForm.name.trim(),
+      email: licenseForm.email.trim(),
+      expiry: licenseForm.expiry.trim(),
+    }
+
     try {
-      const res = await fetch(API_BASE, {
+      const res = await fetch(LICENSES_API_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...licenseForm,
-          name: licenseForm.name.trim(),
-          email: licenseForm.email.trim(),
-          expiry: licenseForm.expiry.trim(),
-        }),
+        body: JSON.stringify(nextRow),
       })
       if (!res.ok) throw new Error('create failed')
-      const created = await res.json()
-      setLicenseRows((prev) => [...prev, created])
+      await res.json()
+      await fetchLicenses()
       setCurrentPage(Math.ceil((licenseRows.length + 1) / pageSize))
       setLicenseForm({
         name: '',
@@ -156,7 +227,7 @@ function App() {
       })
       setTableMessage('')
     } catch {
-      setTableMessage('Failed to add license row.')
+      setTableMessage('Failed to add license. Make sure the backend API is running.')
     }
   }
 
@@ -173,37 +244,39 @@ function App() {
   const handleSaveEdit = async (id) => {
     if (!editForm.name.trim() || !editForm.email.trim() || !editForm.expiry.trim()) return
 
+    const updatedDraft = {
+      name: editForm.name.trim(),
+      email: editForm.email.trim(),
+      status: editForm.status,
+      expiry: editForm.expiry.trim(),
+    }
+
     try {
-      const res = await fetch(`${API_BASE}/${id}`, {
+      const res = await fetch(`${LICENSES_API_BASE}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editForm.name.trim(),
-          email: editForm.email.trim(),
-          status: editForm.status,
-          expiry: editForm.expiry.trim(),
-        }),
+        body: JSON.stringify(updatedDraft),
       })
       if (!res.ok) throw new Error('update failed')
-      const updated = await res.json()
-      setLicenseRows((prev) => prev.map((row) => (row.id === id ? updated : row)))
+      await res.json()
+      await fetchLicenses()
       setEditingId(null)
       setTableMessage('')
     } catch {
-      setTableMessage('Failed to save changes.')
+      setTableMessage('Failed to save changes. Make sure the backend API is running.')
     }
   }
 
   const handleRemove = async (id) => {
     try {
-      const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${LICENSES_API_BASE}/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('delete failed')
-      setLicenseRows((prev) => prev.filter((row) => row.id !== id))
+      await fetchLicenses()
       if (editingId === id) setEditingId(null)
       if (viewRow?.id === id) setViewRow(null)
       setTableMessage('')
     } catch {
-      setTableMessage('Failed to remove row.')
+      setTableMessage('Failed to remove license. Make sure the backend API is running.')
     }
   }
 
@@ -224,8 +297,7 @@ function App() {
 
     const panelHit = panelTargets.find((panel) => panel.terms.some((term) => term.toLowerCase().includes(query)))
     if (panelHit) {
-      document.getElementById(panelHit.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      setSearchFeedback(`Navigated to ${panelHit.terms[0]}.`)
+      navigateToPanel(panelHit.id, `Navigated to ${panelHit.terms[0]}.`)
       return
     }
 
@@ -255,18 +327,35 @@ function App() {
       (row) =>
         row.name.toLowerCase().includes(query) ||
         row.email.toLowerCase().includes(query) ||
-        row.status.toLowerCase().includes(query)
+        getLicenseStatus(row).toLowerCase().includes(query)
     )
 
     if (licenseIndex >= 0) {
       const page = Math.floor(licenseIndex / pageSize) + 1
       setCurrentPage(page)
-      document.getElementById('multisite-license-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      setSearchFeedback(`Found result in Multisite License (page ${page}).`)
+      navigateToPanel('multisite-license-panel', `Found result in Multisite License (page ${page}).`)
       return
     }
 
     setSearchFeedback('No matching result found.')
+  }
+
+  const navigateToPanel = (panelId, feedback) => {
+    document.getElementById(panelId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (feedback) setSearchFeedback(feedback)
+  }
+
+  const handleSidebarNavigation = (label, parentLabel) => {
+    if (label === 'Multisite License') {
+      const licensesMenuKey = `View Options-${parentLabel}`
+      setOpenMenus((prev) => ({ ...prev, [licensesMenuKey]: true }))
+      navigateToPanel('multisite-license-panel', 'Opened Multisite License.')
+      return
+    }
+  }
+
+  const handleViewDetails = (panelId, feedback) => {
+    navigateToPanel(panelId, feedback)
   }
 
   const getDaysRemaining = (expiryText) => {
@@ -284,8 +373,91 @@ function App() {
     return diff
   }
 
+  const getLicenseStatus = (row) => {
+    const daysRemaining = getDaysRemaining(row.expiry)
+    if (typeof daysRemaining !== 'number') return row.status
+    if (daysRemaining < 0) return 'Expired'
+    if (daysRemaining <= 30) return 'Expiring'
+    return 'Active'
+  }
+
+  const statusCounts = licenseRows.reduce(
+    (counts, row) => {
+      const status = getLicenseStatus(row)
+      if (status === 'Expired') counts.expired += 1
+      else if (status === 'Expiring') counts.expiring += 1
+      else counts.active += 1
+      return counts
+    },
+    { active: 0, expiring: 0, expired: 0 }
+  )
+
+  const totalLicenses = licenseRows.length
+  const activePercent = totalLicenses ? Math.round((statusCounts.active / totalLicenses) * 100) : 0
+  const expiringPercent = totalLicenses ? Math.round((statusCounts.expiring / totalLicenses) * 100) : 0
+  const expiredPercent = Math.max(0, 100 - activePercent - expiringPercent)
+  const seatChartStyle = {
+    background: `conic-gradient(var(--blue) 0 ${activePercent}%, #4ec5f2 ${activePercent}% ${activePercent + expiringPercent}%, var(--red) ${activePercent + expiringPercent}% ${activePercent + expiringPercent + expiredPercent}%)`,
+  }
+
+  const renderToolIcon = (tool) => {
+    if (tool.type === 'image') {
+      return <img className="tool-image" src={tool.image} alt={tool.alt} />
+    }
+
+    if (tool.type === 'firmware') {
+      return (
+        <div className="tool-icon tool-icon-firmware" aria-hidden="true">
+          <span className="firmware-ring" />
+          <span className="firmware-arrow one" />
+          <span className="firmware-arrow two" />
+        </div>
+      )
+    }
+
+    if (tool.type === 'password') {
+      return (
+        <div className="tool-icon tool-icon-password" aria-hidden="true">
+          <span className="lock-body" />
+          <span className="lock-shackle" />
+          <span className="password-base" />
+        </div>
+      )
+    }
+
+    if (tool.type === 'users') {
+      return (
+        <div className="tool-icon tool-icon-users" aria-hidden="true">
+          <span className="user-head" />
+          <span className="user-body" />
+        </div>
+      )
+    }
+
+    if (tool.type === 'scanner') {
+      return (
+        <div className="tool-icon tool-icon-scanner" aria-hidden="true">
+          <span className="scanner-node n1" />
+          <span className="scanner-node n2" />
+          <span className="scanner-node n3" />
+          <span className="scanner-node n4" />
+          <span className="scanner-node n5" />
+          <span className="scanner-line l1" />
+          <span className="scanner-line l2" />
+          <span className="scanner-line l3" />
+          <span className="scanner-line l4" />
+        </div>
+      )
+    }
+
+    return <div className="tool-icon" aria-hidden="true" />
+  }
+
   useEffect(() => {
     fetchLicenses()
+    fetchCameraModels()
+    fetchSystemStatus()
+    fetchActionItems()
   }, [])
 
   useEffect(() => {
@@ -321,7 +493,14 @@ function App() {
                 {hasChildren && isOpen ? (
                   <div className="sub-menu">
                     {item.children.map((child) => (
-                      <button key={child} className="sub-btn">{child}</button>
+                      <button
+                        key={child}
+                        className={`sub-btn ${child === 'Multisite License' ? 'is-link' : ''}`}
+                        onClick={() => handleSidebarNavigation(child, item.label)}
+                        type="button"
+                      >
+                        {child}
+                      </button>
                     ))}
                   </div>
                 ) : null}
@@ -356,15 +535,31 @@ function App() {
           <h2>My Tools</h2>
           <div className="tools-grid">
             {tools.map((tool) => (
-              <article key={tool} className="tool-card">
-                <div className="tool-icon">+</div>
-                <h3>{tool}</h3>
+              <article key={tool.label} className="tool-card my-tool-card">
+                {tool.isNew ? <span className="tool-badge">New</span> : null}
+                {renderToolIcon(tool)}
+                <h3>{tool.label}</h3>
               </article>
             ))}
-            <article className="tool-card add-tool">
-              <div className="tool-icon">+</div>
-              <h3>Add Widget</h3>
+            <article className="tool-card tool-card-add" aria-label="Add tool">
+              <span className="tool-add-icon">+</span>
             </article>
+          </div>
+          <div className="external-tools">
+            <h3 className="external-tools-label">External Links</h3>
+            <div className="external-tools-grid">
+            <a
+              className="external-tool-link"
+              href="https://servicechannel.com/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img className="external-tool-image" src={serviceChannelImage} alt="ServiceChannel" />
+            </a>
+            <article className="tool-card tool-card-add external-tool-add" aria-label="Add external link">
+              <span className="tool-add-icon">+</span>
+            </article>
+            </div>
           </div>
         </section>
 
@@ -372,6 +567,7 @@ function App() {
           <div className="status-left">
             <h2>Status</h2>
             <div className="status-card">
+              <div className="status-card-title">Total Systems</div>
               <div className="status-radial-chart" aria-label="Systems status radial chart">
                 <div className="status-radial-track" />
                 <div className="status-radial-green" />
@@ -380,31 +576,57 @@ function App() {
               <ul className="status-legend">
                 <li className="total">
                   <span>Total Systems</span>
-                  <b>11,349</b>
+                  <b>{systemStatus.totalSystems.toLocaleString()}</b>
                 </li>
                 <li className="online">
                   <span>Systems Online</span>
-                  <b>10,351</b>
+                  <b>{systemStatus.systemsOnline.toLocaleString()}</b>
                 </li>
                 <li className="offline">
                   <span>System Offline</span>
-                  <b>72</b>
+                  <b>{systemStatus.systemsOffline.toLocaleString()}</b>
                 </li>
               </ul>
+              {systemStatusMessage ? <p className="table-feedback">{systemStatusMessage}</p> : null}
             </div>
           </div>
 
           <div className="status-right">
-            <h2>Action Items</h2>
-            {actionItems.map((item) => (
-              <div className="action-card" key={item.label}>
-                <p>{item.label}</p>
-                <div className="meter">
-                  <span style={{ width: `${item.level}%` }} />
+            <div className="action-shell">
+              <h2>Action Items</h2>
+              {actionItems[0] ? (
+                <div className="action-card featured" key={actionItems[0].label}>
+                  <p>{actionItems[0].label}</p>
+                  <div className="meter">
+                    <span style={{ width: `${actionItems[0].level || 0}%` }} />
+                  </div>
+                  <div className="action-footer">
+                    <button type="button" onClick={() => handleViewDetails(actionItems[0].panelId, actionItems[0].feedback)}>View Details</button>
+                    <strong>
+                      {actionItems[0].value} <span>{actionItems[0].meta}</span>
+                    </strong>
+                  </div>
                 </div>
-                <strong>{item.value}</strong>
+              ) : null}
+
+              <div className="action-grid">
+                {actionItems.slice(1).map((item) => (
+                  <div className="action-card compact" key={item.label}>
+                    <div className="action-head">
+                      <p>{item.label}</p>
+                      <img className="action-illustration" src={item.icon} alt={item.iconAlt} />
+                    </div>
+                    <div className="action-stat">
+                      <strong>{item.value}</strong>
+                      <span>{item.unit}</span>
+                    </div>
+                    {item.note ? <small>{item.note}</small> : null}
+                    {item.link ? <button type="button" onClick={() => handleViewDetails(item.panelId, item.feedback)}>{item.link}</button> : null}
+                  </div>
+                ))}
               </div>
-            ))}
+              {actionItemsMessage ? <p className="table-feedback">{actionItemsMessage}</p> : null}
+            </div>
           </div>
         </section>
 
@@ -423,23 +645,44 @@ function App() {
               </thead>
               <tbody>
                 {cameraRows.map((row) => (
-                  <tr key={row.model}>
+                  <tr key={row.id || row.model}>
                     <td>{row.model}</td>
                     <td>{row.cameras}</td>
                     <td>{row.systems}</td>
                     <td>{row.ai}</td>
-                    <td>Open</td>
+                    <td className="action-cell">
+                      <button type="button" onClick={() => setCameraViewRow(row)}>Open</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {cameraTableMessage ? <p className="table-feedback">{cameraTableMessage}</p> : null}
+          {cameraViewRow ? (
+            <div className="view-panel">
+              <div className="view-head">
+                <strong>Camera Model Details</strong>
+                <button type="button" onClick={() => setCameraViewRow(null)}>Close</button>
+              </div>
+              <p><b>Model:</b> {cameraViewRow.model}</p>
+              <p><b># of Cameras:</b> {cameraViewRow.cameras}</p>
+              <p><b># of Systems with Camera:</b> {cameraViewRow.systems}</p>
+              <p><b>AI + Analytics:</b> {cameraViewRow.ai}</p>
+            </div>
+          ) : null}
         </section>
 
         <section className="panel" id="trial-license-panel">
           <h2>VM Trial Licenses</h2>
           <div className="license-summary">
-            <div><b>20</b><span>View Details</span></div>
+            <button
+              type="button"
+              className="license-summary-card interactive"
+              onClick={() => handleViewDetails('multisite-license-panel', 'Opened Multisite License.')}
+            >
+              <b>20</b><span>View Details</span>
+            </button>
             <div><b>14</b><span>Active (11%)</span></div>
             <div><b>2</b><span>Expires in 60-90 days</span></div>
             <div><b>3</b><span>Expires in 30-60 days</span></div>
@@ -459,11 +702,11 @@ function App() {
           <h2>Multisite License</h2>
           <div className="multi-body">
             <div className="seat-chart">
-              <div className="seat-donut">52</div>
+              <div className="seat-donut" style={seatChartStyle}>{totalLicenses}</div>
               <ul>
-                <li><span className="dot active" />Active (75%)</li>
-                <li><span className="dot soon" />Expiring Soon (20%)</li>
-                <li><span className="dot exp" />Expired (5%)</li>
+                <li><span className="dot active" />Active ({statusCounts.active})</li>
+                <li><span className="dot soon" />Expiring Soon ({statusCounts.expiring})</li>
+                <li><span className="dot exp" />Expired ({statusCounts.expired})</li>
               </ul>
             </div>
             <div className="multisite-table-panel">
@@ -545,7 +788,7 @@ function App() {
                               <option value="Expired">Expired</option>
                             </select>
                           ) : (
-                            <span className={`pill ${row.status.toLowerCase()}`}>{row.status}</span>
+                            <span className={`pill ${getLicenseStatus(row).toLowerCase()}`}>{getLicenseStatus(row)}</span>
                           )}
                         </td>
                         <td>
@@ -588,7 +831,7 @@ function App() {
                   </div>
                   <p><b>Name:</b> {viewRow.name}</p>
                   <p><b>Email:</b> {viewRow.email}</p>
-                  <p><b>Status:</b> {viewRow.status}</p>
+                  <p><b>Status:</b> {getLicenseStatus(viewRow)}</p>
                   <p><b>Expiration:</b> {viewRow.expiry}</p>
                   <p><b>Days Remaining:</b> {getDaysRemaining(viewRow.expiry)}</p>
                 </div>
