@@ -1,0 +1,51 @@
+[
+  {
+    "id": "69dfb5cfeaaa5417f64baa8d",
+    "model": "CAM600AS",
+    "cameras": "4,671",
+    "systems": "4,235",
+    "ai": "4,235"
+  },
+  {
+    "id": "69dfb4e49c756aafe4737efa",
+    "model": "CAM225",
+    "cameras": "9,233",
+    "systems": "9,142",
+    "ai": "5,520"
+  },
+  {
+    "id": "69dfb4e49c756aafe4737efb",
+    "model": "CAM1100",
+    "cameras": "8,318",
+    "systems": "8,253",
+    "ai": "2,556"
+  },
+  {
+    "id": "69dfb4e49c756aafe4737efc",
+    "model": "CAM360",
+    "cameras": "7,259",
+    "systems": "7,152",
+    "ai": "4,897"
+  },
+  {
+    "id": "69dfb4e49c756aafe4737efd",
+    "model": "CAM5000IR",
+    "cameras": "5,000",
+    "systems": "4,876",
+    "ai": "0"
+  },
+  {
+    "id": "69dfb4e49c756aafe4737efe",
+    "model": "CAM5000BX",
+    "cameras": "4,104",
+    "systems": "4,000",
+    "ai": "0"
+  },
+  {
+    "id": "69dfb4e49c756aafe4737eff",
+    "model": "CAM400WA",
+    "cameras": "3,791",
+    "systems": "3,450",
+    "ai": "3,450"
+  }
+]

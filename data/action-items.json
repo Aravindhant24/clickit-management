@@ -1,0 +1,27 @@
+[
+  {
+    "key": "older-clickit-versions",
+    "label": "Systems with Older ClickIt Software Versions",
+    "value": "5",
+    "meta": "/ 13 systems",
+    "level": 38
+  },
+  {
+    "key": "ssl-certificates-expiring-soon",
+    "label": "SSL Certificates Expiring Soon",
+    "value": "5",
+    "unit": "systems",
+    "note": "Review and renew certificates before expiry.",
+    "link": "View Details",
+    "level": 38
+  },
+  {
+    "key": "security-patch-updates",
+    "label": "Security Patch Updates",
+    "value": "7",
+    "unit": "systems",
+    "note": "Pending OS or ClickIt security patch installation.",
+    "link": "View Details",
+    "level": 54
+  }
+]

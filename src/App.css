@@ -793,6 +793,18 @@ th {
   padding: 10px;
 }
 
+.license-summary-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: left;
+}
+
+.license-summary-card.interactive {
+  cursor: pointer;
+}
+
 .license-summary b {
   font-size: 2rem;
   display: block;
@@ -1085,4 +1097,5 @@ th {
   .add-license-form {
     grid-template-columns: 1fr;
   }
+
 }

@@ -73,27 +73,42 @@ const tools = [
   { label: 'System Scanner', type: 'scanner', isNew: true },
 ]
 
-const actionItems = [
-  { label: 'Systems with Older ClickIt Software Versions', value: '3,102 (33%)', meta: '/10,971', level: 33 },
-  { label: 'SSL Certificates Expiring Soon', value: '2', unit: 'certificates', note: 'Automated. Pending Update', icon: sslImage, iconAlt: 'SSL certificate illustration' },
-  { label: 'Security Patch Updates', value: '1,371', unit: 'systems', link: 'View Details', icon: systemUpdateImage, iconAlt: 'Security patch update illustration' },
-]
-
-const cameraRows = [
-  { model: 'CAM225', cameras: '9,233', systems: '9,142', ai: '5,520' },
-  { model: 'CAM1100', cameras: '8,318', systems: '8,253', ai: '2,556' },
-  { model: 'CAM360', cameras: '7,259', systems: '7,152', ai: '4,897' },
-  { model: 'CAM5000IR', cameras: '5,000', systems: '4,876', ai: '0' },
-  { model: 'CAM5000BX', cameras: '4,104', systems: '4,000', ai: '0' },
-  { model: 'CAM400WA', cameras: '3,791', systems: '3,450', ai: '3,450' },
-]
+const actionItemUiMap = {
+  'older-clickit-versions': {
+    panelId: 'camera-models-panel',
+    feedback: 'Opened IP Camera Models.',
+  },
+  'ssl-certificates-expiring-soon': {
+    icon: sslImage,
+    iconAlt: 'SSL certificate illustration',
+    panelId: 'trial-license-panel',
+    feedback: 'Opened VM Trial Licenses.',
+  },
+  'security-patch-updates': {
+    icon: systemUpdateImage,
+    iconAlt: 'Security patch update illustration',
+    panelId: 'multisite-license-panel',
+    feedback: 'Opened Multisite License.',
+  },
+}
 
 const API_ROOT = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
-const API_BASE = `${API_ROOT}/licenses`
+const LICENSES_API_BASE = `${API_ROOT}/licenses`
+const CAMERA_MODELS_API_BASE = `${API_ROOT}/camera-models`
+const SYSTEM_STATUS_API_BASE = `${API_ROOT}/system-status`
+const ACTION_ITEMS_API_BASE = `${API_ROOT}/action-items`
 
 function App() {
   const [openMenus, setOpenMenus] = useState({})
   const [licenseRows, setLicenseRows] = useState([])
+  const [cameraRows, setCameraRows] = useState([])
+  const [cameraViewRow, setCameraViewRow] = useState(null)
+  const [systemStatus, setSystemStatus] = useState({
+    totalSystems: 0,
+    systemsOnline: 0,
+    systemsOffline: 0,
+  })
+  const [actionItems, setActionItems] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [licenseForm, setLicenseForm] = useState({
     name: '',
@@ -107,6 +122,9 @@ function App() {
   const [editForm, setEditForm] = useState({ name: '', email: '', status: 'Active', expiry: '' })
   const [viewRow, setViewRow] = useState(null)
   const [tableMessage, setTableMessage] = useState('')
+  const [cameraTableMessage, setCameraTableMessage] = useState('')
+  const [systemStatusMessage, setSystemStatusMessage] = useState('')
+  const [actionItemsMessage, setActionItemsMessage] = useState('')
   const pageSize = 5
 
   const toggleMenu = (key) => {
@@ -123,7 +141,7 @@ function App() {
 
   const fetchLicenses = async () => {
     try {
-      const res = await fetch(API_BASE)
+      const res = await fetch(LICENSES_API_BASE)
       if (!res.ok) throw new Error('Failed to fetch data')
       const rows = await res.json()
       setLicenseRows(rows)
@@ -131,6 +149,53 @@ function App() {
     } catch {
       setLicenseRows([])
       setTableMessage('Unable to load license data. Start the backend API with `npm run server`.')
+    }
+  }
+
+  const fetchCameraModels = async () => {
+    try {
+      const res = await fetch(CAMERA_MODELS_API_BASE)
+      if (!res.ok) throw new Error('Failed to fetch camera models')
+      const rows = await res.json()
+      setCameraRows(rows)
+      setCameraTableMessage('')
+    } catch {
+      setCameraRows([])
+      setCameraTableMessage('Unable to load camera models. Start the backend API with `npm run server`.')
+    }
+  }
+
+  const fetchSystemStatus = async () => {
+    try {
+      const res = await fetch(SYSTEM_STATUS_API_BASE)
+      if (!res.ok) throw new Error('Failed to fetch system status')
+      const row = await res.json()
+      setSystemStatus(row)
+      setSystemStatusMessage('')
+    } catch {
+      setSystemStatus({
+        totalSystems: 0,
+        systemsOnline: 0,
+        systemsOffline: 0,
+      })
+      setSystemStatusMessage('Unable to load system status. Start the backend API with `npm run server`.')
+    }
+  }
+
+  const fetchActionItems = async () => {
+    try {
+      const res = await fetch(ACTION_ITEMS_API_BASE)
+      if (!res.ok) throw new Error('Failed to fetch action items')
+      const rows = await res.json()
+      const mappedRows = rows.map((row) => ({
+        ...row,
+        ...actionItemUiMap[row.key],
+      }))
+      setActionItems(mappedRows)
+      setActionItemsMessage('')
+    } catch {
+      setActionItems([])
+      setActionItemsMessage('Unable to load action items. Start the backend API with `npm run server`.')
     }
   }
 
@@ -145,14 +210,14 @@ function App() {
     }
 
     try {
-      const res = await fetch(API_BASE, {
+      const res = await fetch(LICENSES_API_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nextRow),
       })
       if (!res.ok) throw new Error('create failed')
-      const created = await res.json()
-      setLicenseRows((prev) => [...prev, created])
+      await res.json()
+      await fetchLicenses()
       setCurrentPage(Math.ceil((licenseRows.length + 1) / pageSize))
       setLicenseForm({
         name: '',
@@ -187,14 +252,14 @@ function App() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/${id}`, {
+      const res = await fetch(`${LICENSES_API_BASE}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedDraft),
       })
       if (!res.ok) throw new Error('update failed')
-      const updated = await res.json()
-      setLicenseRows((prev) => prev.map((row) => (row.id === id ? updated : row)))
+      await res.json()
+      await fetchLicenses()
       setEditingId(null)
       setTableMessage('')
     } catch {
@@ -204,9 +269,9 @@ function App() {
 
   const handleRemove = async (id) => {
     try {
-      const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${LICENSES_API_BASE}/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('delete failed')
-      setLicenseRows((prev) => prev.filter((row) => row.id !== id))
+      await fetchLicenses()
       if (editingId === id) setEditingId(null)
       if (viewRow?.id === id) setViewRow(null)
       setTableMessage('')
@@ -223,7 +288,7 @@ function App() {
     }
 
     const panelTargets = [
-      { id: 'my-tools-panel', terms: ['my tools', ...tools] },
+      { id: 'my-tools-panel', terms: ['my tools', ...tools.map((tool) => tool.label)] },
       { id: 'status-panel', terms: ['status', 'systems', 'action items'] },
       { id: 'camera-models-panel', terms: ['ip camera models', 'camera models', 'cameras'] },
       { id: 'trial-license-panel', terms: ['vm trial licenses', 'trial licenses'] },
@@ -287,6 +352,10 @@ function App() {
       navigateToPanel('multisite-license-panel', 'Opened Multisite License.')
       return
     }
+  }
+
+  const handleViewDetails = (panelId, feedback) => {
+    navigateToPanel(panelId, feedback)
   }
 
   const getDaysRemaining = (expiryText) => {
@@ -386,6 +455,9 @@ function App() {
 
   useEffect(() => {
     fetchLicenses()
+    fetchCameraModels()
+    fetchSystemStatus()
+    fetchActionItems()
   }, [])
 
   useEffect(() => {
@@ -504,35 +576,38 @@ function App() {
               <ul className="status-legend">
                 <li className="total">
                   <span>Total Systems</span>
-                  <b>11,349</b>
+                  <b>{systemStatus.totalSystems.toLocaleString()}</b>
                 </li>
                 <li className="online">
                   <span>Systems Online</span>
-                  <b>10,351</b>
+                  <b>{systemStatus.systemsOnline.toLocaleString()}</b>
                 </li>
                 <li className="offline">
                   <span>System Offline</span>
-                  <b>72</b>
+                  <b>{systemStatus.systemsOffline.toLocaleString()}</b>
                 </li>
               </ul>
+              {systemStatusMessage ? <p className="table-feedback">{systemStatusMessage}</p> : null}
             </div>
           </div>
 
           <div className="status-right">
             <div className="action-shell">
               <h2>Action Items</h2>
-              <div className="action-card featured" key={actionItems[0].label}>
-                <p>{actionItems[0].label}</p>
-                <div className="meter">
-                  <span style={{ width: `${actionItems[0].level}%` }} />
+              {actionItems[0] ? (
+                <div className="action-card featured" key={actionItems[0].label}>
+                  <p>{actionItems[0].label}</p>
+                  <div className="meter">
+                    <span style={{ width: `${actionItems[0].level || 0}%` }} />
+                  </div>
+                  <div className="action-footer">
+                    <button type="button" onClick={() => handleViewDetails(actionItems[0].panelId, actionItems[0].feedback)}>View Details</button>
+                    <strong>
+                      {actionItems[0].value} <span>{actionItems[0].meta}</span>
+                    </strong>
+                  </div>
                 </div>
-                <div className="action-footer">
-                  <button type="button">View Details</button>
-                  <strong>
-                    {actionItems[0].value} <span>{actionItems[0].meta}</span>
-                  </strong>
-                </div>
-              </div>
+              ) : null}
 
               <div className="action-grid">
                 {actionItems.slice(1).map((item) => (
@@ -546,10 +621,11 @@ function App() {
                       <span>{item.unit}</span>
                     </div>
                     {item.note ? <small>{item.note}</small> : null}
-                    {item.link ? <button type="button">{item.link}</button> : null}
+                    {item.link ? <button type="button" onClick={() => handleViewDetails(item.panelId, item.feedback)}>{item.link}</button> : null}
                   </div>
                 ))}
               </div>
+              {actionItemsMessage ? <p className="table-feedback">{actionItemsMessage}</p> : null}
             </div>
           </div>
         </section>
@@ -569,23 +645,44 @@ function App() {
               </thead>
               <tbody>
                 {cameraRows.map((row) => (
-                  <tr key={row.model}>
+                  <tr key={row.id || row.model}>
                     <td>{row.model}</td>
                     <td>{row.cameras}</td>
                     <td>{row.systems}</td>
                     <td>{row.ai}</td>
-                    <td>Open</td>
+                    <td className="action-cell">
+                      <button type="button" onClick={() => setCameraViewRow(row)}>Open</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {cameraTableMessage ? <p className="table-feedback">{cameraTableMessage}</p> : null}
+          {cameraViewRow ? (
+            <div className="view-panel">
+              <div className="view-head">
+                <strong>Camera Model Details</strong>
+                <button type="button" onClick={() => setCameraViewRow(null)}>Close</button>
+              </div>
+              <p><b>Model:</b> {cameraViewRow.model}</p>
+              <p><b># of Cameras:</b> {cameraViewRow.cameras}</p>
+              <p><b># of Systems with Camera:</b> {cameraViewRow.systems}</p>
+              <p><b>AI + Analytics:</b> {cameraViewRow.ai}</p>
+            </div>
+          ) : null}
         </section>
 
         <section className="panel" id="trial-license-panel">
           <h2>VM Trial Licenses</h2>
           <div className="license-summary">
-            <div><b>20</b><span>View Details</span></div>
+            <button
+              type="button"
+              className="license-summary-card interactive"
+              onClick={() => handleViewDetails('multisite-license-panel', 'Opened Multisite License.')}
+            >
+              <b>20</b><span>View Details</span>
+            </button>
             <div><b>14</b><span>Active (11%)</span></div>
             <div><b>2</b><span>Expires in 60-90 days</span></div>
             <div><b>3</b><span>Expires in 30-60 days</span></div>
